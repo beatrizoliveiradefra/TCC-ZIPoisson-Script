@@ -1,0 +1,144 @@
+library(extraDistr)
+library(maxLik)
+
+
+# Simulação de Monte Carlo para análisar o comportamento dos estimadores a medida que varia a média e a proporção de zeros presente na amostra.  -------------------------------------------------------
+set.seed(2023)
+R = 10000
+n=100
+pvalue= rep(0,R)
+lambda = 2
+pi.p= 0.17
+pa = c(lambda,pi.p)
+contpois=0
+pa.hat = rep(0,R)
+coef_results<-c()
+results<-c()
+
+lambda.hat.mv = rep(0,R)
+pi.hat.mv = rep(0,R)
+lambda.hat.mv.erro = rep(0,R)
+
+p.value = rep(0,R)
+nc=0
+ni=0
+#funcao de log-verossimilhanca da POIZ  
+loglikPOIZ<-function(pa){
+  lambda <-pa[1]
+  pi.p <-pa[2]
+  
+  fat=factorial(y)  
+  l = ifelse(y == 0, (log((pi.p)+(1-pi.p)*exp(-lambda))),(log((1-pi.p)*exp(-lambda)*(lambda^y))-log(fat)))
+  
+  
+  return(l)  
+}
+
+#funcao de log-verossimilhanca da PO  
+loglikPO<-function(pa){
+  lambda <-pa[1]
+  #pi.p <-pa[2]
+  
+  fat=factorial(y)  
+  l = -lambda+y*log(lambda)-log(fat)
+  
+  
+  return(l)  
+}
+
+#i = 1
+for (i in 1:R){
+  #print(i)
+  y = rzip(n,lambda,pi.p)
+  
+  lambda_est_poisson = mean(y)
+  p0_tilde = exp(-lambda_est_poisson)
+  n0 = sum(1*(!(y>0)))
+  n = length(y)
+  # number of observtions 'expected' to be zero;
+  n*p0_tilde
+  #now lets perform the JVDB score test;
+  numerator = (n0 -n*p0_tilde)^2
+  denominator = (n*p0_tilde*(1-p0_tilde)) - (n*lambda_est_poisson*(p0_tilde^2))
+  
+  # teste inflacao
+  test_stat = numerator/denominator
+  #print(test_stat)
+  qx<-qchisq(0.95,1)
+  pvalue= pchisq(test_stat,df=1, ncp=0, lower.tail=FALSE)
+  #pvalue <- na.omit(pvalue)
+  # Dado que "aceito" H0, ou seja, os dados seguem distribuição Poisson Inflacionada em Zero
+  if((pvalue>0.05)) 
+  {
+    # Estimando POIZ
+    ml = maxLik(loglikPOIZ, start = c(2, 0.1))
+    lambda.hat.mv[i] = ml$estimate[1]
+    pi.hat.mv[i] = ml$estimate[2]
+    
+    ml.erro = maxLik(loglikPO, start = c(2, 0.1) )
+    lambda.hat.mv.erro[i] = ml.erro$estimate[1]
+    
+  }else{
+    
+    lambda.hat.mv[i] = NA
+    lambda.hat.mv.erro[i] = NA
+    contpois = contpois+1
+    
+    next;
+  }
+  
+}
+print(pi.p)
+print(lambda)
+print(n)
+print(n0)
+
+print("contpois: ")
+print(contpois)
+
+lambda.hat.mv.new = na.omit(lambda.hat.mv)
+m.lambda.hat.mv = mean(lambda.hat.mv.new )
+m.lambda.hat.mv 
+var.lambda.hat.mv = var(lambda.hat.mv.new )
+var.lambda.hat.mv 
+vies.lambda.hat.mv = m.lambda.hat.mv -lambda
+vies.lambda.hat.mv
+rb.lambbda = 100 * (abs(vies.lambda.hat.mv)/lambda)
+rb.lambbda
+eqm.lambda =  var.lambda.hat.mv+((vies.lambda.hat.mv)^2)
+eqm.lambda
+
+lambda.hat.mv.new.erro = na.omit(lambda.hat.mv.erro)
+m.lambda.hat.mv.erro = mean(lambda.hat.mv.new.erro )
+m.lambda.hat.mv.erro 
+var.lambda.hat.mv.erro = var(lambda.hat.mv.new.erro )
+var.lambda.hat.mv.erro 
+vies.lambda.hat.mv.erro = m.lambda.hat.mv.erro -lambda
+vies.lambda.hat.mv.erro
+rb.lambbda.erro = 100 * (abs(vies.lambda.hat.mv.erro)/lambda)
+rb.lambbda.erro
+eqm.lambda.erro =  var.lambda.hat.mv.erro+(vies.lambda.hat.mv.erro)^2
+eqm.lambda.erro
+
+results_zip <- data.frame(
+  method = "Zip",
+  mean_lambda_hat = m.lambda.hat.mv,
+  var_lambda_hat = var.lambda.hat.mv,
+  vies_lambda_hat = vies.lambda.hat.mv,
+  rb_lambda = rb.lambbda,
+  eqm_lambda = eqm.lambda
+)
+
+results_poisson <- data.frame(
+  method = "Poisson",
+  mean_lambda_hat = m.lambda.hat.mv.erro,
+  var_lambda_hat = var.lambda.hat.mv.erro,
+  vies_lambda_hat = vies.lambda.hat.mv.erro,
+  rb_lambda = rb.lambbda.erro,
+  eqm_lambda = eqm.lambda.erro
+)
+
+combined_results <- rbind(results_zip, results_poisson)
+combined_results <- cbind(combined_results, n = n, lambda = lambda, pi.p = pi.p, n0 = n0, contpois = contpois)
+combined_results
+
